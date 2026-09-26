@@ -39,10 +39,14 @@ After installing, **close and reopen** your terminal (and VS Code) so the new
 
 ## 2. Get the project
 
+Repository: **https://github.com/Prasat6/chubb-assessment**
+(latest release: [`release/0.2.0`](https://github.com/Prasat6/chubb-assessment/tree/release/0.2.0))
+
 Either clone it:
 
 ```bash
-git clone https://github.com/<your-account>/chubb-claims-platform.git
+git clone -b release/0.2.0 https://github.com/Prasat6/chubb-assessment.git
+cd chubb-assessment
 ```
 
 or, on the GitHub page, click **Code → Download ZIP** and unzip it.
