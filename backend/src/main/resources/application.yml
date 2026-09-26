@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: claims-platform
+
+  datasource:
+    # In-memory and reseeded on every restart — fine for a prototype/demo.
+    # Swap to jdbc:h2:file:./data/claims-db for a persistent local DB, or to
+    # a Postgres URL for anything beyond local demo use.
+    url: jdbc:h2:mem:claimsdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    # data.sql (seed users/claims) must run AFTER Hibernate creates the schema.
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  sql:
+    init:
+      mode: always
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service-stub
+      auto-offset-reset: earliest
+      # These two were missing: without them Boot defaults to StringDeserializer,
+      # so the consumer got raw JSON text and couldn't convert it to ClaimEvent
+      # (the producer-side JsonSerializer in KafkaConfig.java only covers publishing).
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.chubb.claims.event"
+        spring.json.value.default.type: com.chubb.claims.event.ClaimEvent
+        spring.json.use.type.headers: false
+    listener:
+      # Only start the consumer when Kafka is switched on (see app.kafka.enabled
+      # below). Previously it always started, and with no broker running it
+      # spammed "Connection to node -1 could not be established" warnings.
+      auto-startup: ${app.kafka.enabled}
+      missing-topics-fatal: false
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
+app:
+  kafka:
+    # Kafka is OFF by default so the app runs with zero extra setup. With it
+    # off, claim events are simply not published (no 2-second stall per claim
+    # action waiting for a broker that isn't there) and the consumer doesn't
+    # start. Turn it on after `docker compose up -d` by setting the
+    # environment variable KAFKA_ENABLED=true, e.g. in PowerShell:
+    #   $env:KAFKA_ENABLED="true"; mvn spring-boot:run
+    enabled: ${KAFKA_ENABLED:false}
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.chubb.claims: INFO
+    org.apache.kafka: WARN

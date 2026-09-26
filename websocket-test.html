@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Chubb Claims — Notification Dispatch (live)</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 24px; color: #1c2733; }
+    h1 { font-size: 18px; color: #0b2545; }
+    #status { font-size: 13px; margin-bottom: 16px; }
+    #status.connected { color: #157347; }
+    #status.disconnected { color: #c8102e; }
+    .row { background: white; border: 1px solid #dde3ea; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 13px; }
+    .row .top { display: flex; justify-content: space-between; color: #5c6b7a; font-size: 11px; margin-bottom: 4px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color: white; }
+    .SENT { background: #157347; }
+    .FAILED { background: #c8102e; }
+    .empty { color: #5c6b7a; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Chubb Claims — live notification dispatch feed</h1>
+  <div id="status" class="disconnected">Connecting to ws://localhost:8080/ws/notifications…</div>
+  <div id="feed"><div class="empty">Nothing yet — trigger a dispatch (SoapUI POST, or use the app) and it'll appear here instantly, no refresh needed.</div></div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const feedEl = document.getElementById('feed');
+    let cleared = false;
+
+    // Message text comes from API callers (anyone can POST /api/notify/*), so escape it
+    // before putting it into the page - otherwise a message containing HTML/script runs here.
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function connect() {
+      const ws = new WebSocket('ws://localhost:8080/ws/notifications');
+
+      ws.onopen = () => {
+        statusEl.textContent = 'Connected — waiting for dispatch events';
+        statusEl.className = 'connected';
+      };
+
+      ws.onclose = () => {
+        statusEl.textContent = 'Disconnected — retrying in 2s (is the backend running?)';
+        statusEl.className = 'disconnected';
+        setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (event) => {
+        if (!cleared) { feedEl.innerHTML = ''; cleared = true; }
+        const d = JSON.parse(event.data);
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `
+          <div class="top">
+            <span>${esc(new Date(d.dispatchedAt).toLocaleTimeString())} · triggered by ${esc(d.triggeredBy)}</span>
+            <span class="badge ${esc(d.status)}">${esc(d.status)}</span>
+          </div>
+          <div><strong>${esc(d.channel)}</strong> → ${esc(d.recipientAddress)}</div>
+          <div>${d.subject ? '<em>' + esc(d.subject) + '</em><br/>' : ''}${esc(d.message)}</div>
+        `;
+        feedEl.prepend(row);
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>
