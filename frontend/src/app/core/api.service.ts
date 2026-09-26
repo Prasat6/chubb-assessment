@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { shareReplay } from 'rxjs/operators';
 import {
+  AppConfig,
   AttachmentDto,
   ClaimDetailDto,
   ClaimSummaryDto,
@@ -81,6 +83,19 @@ export class ApiService {
   // -- manager -----------------------------------------------------------
   exposure(): Observable<ExposureDto> {
     return this.http.get<ExposureDto>(`${BASE}/dashboard/exposure`);
+  }
+
+  /** Every open claim, highest liability first (officer/manager only). */
+  openClaims(): Observable<ClaimSummaryDto[]> {
+    return this.http.get<ClaimSummaryDto[]>(`${BASE}/dashboard/open-claims`);
+  }
+
+  // -- config (fetched once and cached) -----------------------------------
+  private config$?: Observable<AppConfig>;
+
+  config(): Observable<AppConfig> {
+    this.config$ ??= this.http.get<AppConfig>(`${BASE}/config`).pipe(shareReplay(1));
+    return this.config$;
   }
 
   // -- attachments (claimant on own claim, officer on assigned claim) ------

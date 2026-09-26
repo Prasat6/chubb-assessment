@@ -1,6 +1,8 @@
 package com.chubb.claims.dto;
 
 import com.chubb.claims.domain.*;
+import com.chubb.claims.service.SlaPolicy;
+import com.chubb.claims.service.SlaPolicy.SlaState;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -112,13 +114,15 @@ public class Dtos {
     public record ClaimSummaryDto(
             Long id, ClaimType type, ClaimStatus status, LocalDate incidentDate,
             BigDecimal estimatedLiability, Instant createdAt, Instant updatedAt,
-            UserDto claimant, UserDto assignedOfficer
+            UserDto claimant, UserDto assignedOfficer,
+            Instant dueAt, SlaState slaState
     ) {
-        public static ClaimSummaryDto from(Claim c) {
+        public static ClaimSummaryDto from(Claim c, SlaPolicy sla) {
             return new ClaimSummaryDto(
                     c.getId(), c.getType(), c.getStatus(), c.getIncidentDate(), c.getEstimatedLiability(),
                     c.getCreatedAt(), c.getUpdatedAt(), UserDto.from(c.getClaimant()),
-                    c.getAssignedOfficer() == null ? null : UserDto.from(c.getAssignedOfficer())
+                    c.getAssignedOfficer() == null ? null : UserDto.from(c.getAssignedOfficer()),
+                    sla.dueAt(c), sla.state(c, Instant.now())
             );
         }
     }
@@ -129,9 +133,10 @@ public class Dtos {
             BigDecimal estimatedLiability, Instant createdAt, Instant updatedAt,
             UserDto claimant, UserDto assignedOfficer,
             List<InfoRequestDto> infoRequests, List<ClaimNoteDto> notes, List<StatusHistoryDto> statusHistory,
-            List<AttachmentDto> attachments
+            List<AttachmentDto> attachments,
+            Instant dueAt, SlaState slaState, long slaTargetHours, Instant resolvedAt
     ) {
-        public static ClaimDetailDto from(Claim c) {
+        public static ClaimDetailDto from(Claim c, SlaPolicy sla) {
             return new ClaimDetailDto(
                     c.getId(), c.getType(), c.getStatus(), c.getIncidentDate(), c.getIncidentDescription(),
                     c.getEstimatedLiability(), c.getCreatedAt(), c.getUpdatedAt(),
@@ -140,7 +145,8 @@ public class Dtos {
                     c.getInfoRequests().stream().map(InfoRequestDto::from).toList(),
                     c.getNotes().stream().map(ClaimNoteDto::from).toList(),
                     c.getStatusHistory().stream().map(StatusHistoryDto::from).toList(),
-                    c.getAttachments().stream().map(AttachmentDto::from).toList()
+                    c.getAttachments().stream().map(AttachmentDto::from).toList(),
+                    sla.dueAt(c), sla.state(c, Instant.now()), sla.targetHours(c.getType()), sla.resolvedAt(c)
             );
         }
     }
@@ -151,8 +157,19 @@ public class Dtos {
             BigDecimal totalOutstandingLiability,
             long openClaims,
             List<TypeBreakdown> byType,
-            List<StatusBreakdown> byStatus
+            List<StatusBreakdown> byStatus,
+            long overdueClaims,
+            long atRiskClaims,
+            List<SlaBreakdown> slaByType
     ) {}
+
+    /**
+     * Resolution-time performance per claim type: open claims by SLA state, and
+     * for resolved claims how many met the target.
+     */
+    public record SlaBreakdown(ClaimType type, long targetHours,
+                               long onTrack, long atRisk, long overdue,
+                               long resolved, long resolvedOnTime) {}
 
     public record TypeBreakdown(ClaimType type, long count, BigDecimal totalLiability) {}
 

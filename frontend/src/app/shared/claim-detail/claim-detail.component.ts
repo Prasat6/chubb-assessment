@@ -3,6 +3,7 @@ import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from
 import { FormsModule } from '@angular/forms';
 import { AttachmentDto, ClaimDetailDto, ClaimStatus, UserDto } from '../models/models';
 import { ClaimTimelineComponent } from '../claim-timeline/claim-timeline.component';
+import { SlaBadgeComponent } from '../sla-badge/sla-badge.component';
 
 interface Action {
   key: string;
@@ -13,7 +14,7 @@ interface Action {
 @Component({
   selector: 'app-claim-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, ClaimTimelineComponent],
+  imports: [CommonModule, FormsModule, ClaimTimelineComponent, SlaBadgeComponent],
   template: `
     <div *ngIf="claim" class="card">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -30,6 +31,11 @@ interface Action {
 
       <div class="grid" style="margin-top:8px;">
         <div><label>Assigned officer</label>{{ claim.assignedOfficer?.name || '— unassigned —' }}</div>
+        <div>
+          <label>Resolution target ({{ targetLabel() }})</label>
+          <app-sla-badge [state]="claim.slaState" [dueAt]="claim.dueAt"></app-sla-badge>
+          <span style="font-size:12px; color:var(--text-muted);"> due {{ claim.dueAt | date: 'short' }}</span>
+        </div>
         <div><label>Estimated liability</label>{{ claim.estimatedLiability != null ? ('RM ' + claim.estimatedLiability) : '— not yet assessed —' }}</div>
       </div>
 
@@ -272,6 +278,11 @@ export class ClaimDetailComponent implements OnChanges {
     const response = this.respondInputs[infoRequestId];
     if (!response?.trim()) return;
     this.respondEvent.emit({ infoRequestId, response: response.trim() });
+  }
+
+  targetLabel(): string {
+    const h = this.claim?.slaTargetHours ?? 0;
+    return h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h}h`;
   }
 
   /** Evidence is frozen once a claim is decided (mirrors the backend rule). */

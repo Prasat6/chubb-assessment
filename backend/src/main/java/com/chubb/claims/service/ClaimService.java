@@ -8,11 +8,14 @@ import com.chubb.claims.repository.ClaimRepository;
 import com.chubb.claims.web.ForbiddenActionException;
 import com.chubb.claims.web.IllegalStateTransitionException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -23,9 +26,20 @@ public class ClaimService {
     private final ClaimRepository claimRepository;
     private final KafkaEventPublisher eventPublisher;
     private final NotificationService notificationService;
+    private final SlaPolicy slaPolicy;
 
-    /** Claims assessed at or above this liability alert every manager. Prototype-fixed; would be configurable per market in production. */
-    private static final java.math.BigDecimal HIGH_VALUE_THRESHOLD = new java.math.BigDecimal("50000");
+    /**
+     * Claims assessed at or above this liability alert every manager and are
+     * highlighted on the dashboard. Set in application.yml
+     * (app.claims.high-value-threshold); the default here only applies when the
+     * property is missing, e.g. in plain unit tests.
+     */
+    @Value("${app.claims.high-value-threshold:50000}")
+    private BigDecimal highValueThreshold = new BigDecimal("50000");
+
+    public BigDecimal getHighValueThreshold() {
+        return highValueThreshold;
+    }
 
     // ---- Claimant actions -------------------------------------------------
 
@@ -34,13 +48,13 @@ public class ClaimService {
         Claim claim = new Claim(claimant, req.type(), req.incidentDate(), req.incidentDescription());
         claim = claimRepository.save(claim);
         eventPublisher.publish(ClaimEvent.submitted(claim.getId(), claimant.getId()));
-        return ClaimDetailDto.from(claim);
+        return detail(claim);
     }
 
     public List<ClaimSummaryDto> myClaims(User claimant) {
         requireRole(claimant, UserRole.CLAIMANT);
         return claimRepository.findByClaimantOrderByCreatedAtDesc(claimant).stream()
-                .map(ClaimSummaryDto::from).toList();
+                .map(this::summary).toList();
     }
 
     public InfoRequestDto respondToInfoRequest(User claimant, Long claimId, Long infoRequestId,
@@ -61,6 +75,14 @@ public class ClaimService {
             notificationService.notify(claim.getAssignedOfficer(), claim,
                     claim.getClaimant().getName() + " responded to your information request on claim #" + claim.getId());
         }
+        // Once every outstanding question is answered, the ball is back in the officer's
+        // court: move the claim back to UNDER_REVIEW automatically instead of leaving it
+        // showing "Info requested" until the officer notices.
+        boolean allAnswered = claim.getInfoRequests().stream()
+                .allMatch(ir -> ir.getStatus() == InfoRequest.Status.RESPONDED);
+        if (claim.getStatus() == ClaimStatus.INFO_REQUESTED && allAnswered) {
+            transitionStatus(claim, ClaimStatus.UNDER_REVIEW, claimant);
+        }
         return InfoRequestDto.from(infoRequest);
     }
 
@@ -70,7 +92,7 @@ public class ClaimService {
         // Was unauthenticated: anyone could list every unassigned claim and its claimant's details.
         requireRole(officer, UserRole.OFFICER, UserRole.MANAGER);
         return claimRepository.findByStatusAndAssignedOfficerIsNullOrderByCreatedAtAsc(ClaimStatus.SUBMITTED)
-                .stream().map(ClaimSummaryDto::from).toList();
+                .stream().map(this::summary).toList();
     }
 
     public ClaimDetailDto assignToSelf(User officer, Long claimId) {
@@ -81,13 +103,13 @@ public class ClaimService {
         }
         claim.setAssignedOfficer(officer);
         transitionStatus(claim, ClaimStatus.UNDER_REVIEW, officer);
-        return ClaimDetailDto.from(claim);
+        return detail(claim);
     }
 
     public List<ClaimSummaryDto> myWorkload(User officer) {
         requireRole(officer, UserRole.OFFICER, UserRole.MANAGER);
         return claimRepository.findByAssignedOfficerOrderByUpdatedAtDesc(officer).stream()
-                .map(ClaimSummaryDto::from).toList();
+                .map(this::summary).toList();
     }
 
     public WorkloadDto workloadSummary(User officer) {
@@ -116,7 +138,7 @@ public class ClaimService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter an estimated liability before marking the claim as assessed");
         }
         transitionStatus(claim, req.targetStatus(), officer);
-        return ClaimDetailDto.from(claim);
+        return detail(claim);
     }
 
     public InfoRequestDto requestInfo(User officer, Long claimId, InfoRequestCreateRequest req) {
@@ -146,7 +168,7 @@ public class ClaimService {
         if (requester.getRole() == UserRole.CLAIMANT && !claim.getClaimant().getId().equals(requester.getId())) {
             throw new ForbiddenActionException("You may only view your own claims");
         }
-        return ClaimDetailDto.from(claim);
+        return detail(claim);
     }
 
     // ---- Manager dashboard -----------------------------------------------------
@@ -174,7 +196,40 @@ public class ClaimService {
                 .map(status -> new StatusBreakdown(status, open.stream().filter(c -> c.getStatus() == status).count()))
                 .toList();
 
-        return new ExposureDto(totalLiability, open.size(), byType, byStatus);
+        // Resolution-time (SLA) performance: open claims by state, resolved claims on time vs late.
+        java.time.Instant now = java.time.Instant.now();
+        List<Claim> all = claimRepository.findAll();
+        var slaByType = java.util.Arrays.stream(ClaimType.values())
+                .map(type -> {
+                    var states = all.stream().filter(c -> c.getType() == type)
+                            .map(c -> slaPolicy.state(c, now)).toList();
+                    return new SlaBreakdown(type, slaPolicy.targetHours(type),
+                            states.stream().filter(st -> st == SlaPolicy.SlaState.ON_TRACK).count(),
+                            states.stream().filter(st -> st == SlaPolicy.SlaState.AT_RISK).count(),
+                            states.stream().filter(st -> st == SlaPolicy.SlaState.OVERDUE).count(),
+                            states.stream().filter(st -> st == SlaPolicy.SlaState.MET || st == SlaPolicy.SlaState.MISSED).count(),
+                            states.stream().filter(st -> st == SlaPolicy.SlaState.MET).count());
+                }).toList();
+        long overdue = slaByType.stream().mapToLong(SlaBreakdown::overdue).sum();
+        long atRisk = slaByType.stream().mapToLong(SlaBreakdown::atRisk).sum();
+
+        return new ExposureDto(totalLiability, open.size(), byType, byStatus, overdue, atRisk, slaByType);
+    }
+
+    /**
+     * Every open claim (not settled, rejected or closed), highest liability first,
+     * so a manager can see which individual claims make up the exposure total.
+     * Staff only: unlike the aggregate exposure figures, this includes claimant names.
+     */
+    public List<ClaimSummaryDto> openClaims(User requester) {
+        requireRole(requester, UserRole.OFFICER, UserRole.MANAGER);
+        return claimRepository.findByStatusNotIn(
+                        List.of(ClaimStatus.SETTLED, ClaimStatus.REJECTED, ClaimStatus.CLOSED))
+                .stream()
+                .sorted(Comparator.comparing(Claim::getEstimatedLiability,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::summary)
+                .toList();
     }
 
     // ---- Attachments -----------------------------------------------------
@@ -240,6 +295,14 @@ public class ClaimService {
 
     // ---- internal helpers -----------------------------------------------------
 
+    private ClaimSummaryDto summary(Claim c) {
+        return ClaimSummaryDto.from(c, slaPolicy);
+    }
+
+    private ClaimDetailDto detail(Claim c) {
+        return ClaimDetailDto.from(c, slaPolicy);
+    }
+
     private void transitionStatus(Claim claim, ClaimStatus target, User changedBy) {
         ClaimStatus current = claim.getStatus();
         if (!current.canTransitionTo(target)) {
@@ -253,10 +316,10 @@ public class ClaimService {
         notificationService.notify(claim.getClaimant(), claim,
                 "Your claim #" + claim.getId() + " moved from " + current + " to " + target);
         if (target == ClaimStatus.ASSESSED && claim.getEstimatedLiability() != null
-                && claim.getEstimatedLiability().compareTo(HIGH_VALUE_THRESHOLD) >= 0) {
+                && claim.getEstimatedLiability().compareTo(highValueThreshold) >= 0) {
             notificationService.notifyManagers(claim,
                     "Claim #" + claim.getId() + " assessed at RM " + claim.getEstimatedLiability()
-                            + " - above the RM " + HIGH_VALUE_THRESHOLD + " review threshold");
+                            + " - above the RM " + highValueThreshold + " review threshold");
         }
     }
 

@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { interval, of } from 'rxjs';
+import { catchError, startWith, switchMap } from 'rxjs/operators';
 import { ApiService } from '../core/api.service';
 import { ClaimSummaryDto } from '../shared/models/models';
 
@@ -36,8 +39,19 @@ export class MyClaimsComponent implements OnInit {
 
   constructor(private api: ApiService, private router: Router) {}
 
+  /** Lists refresh every 10 seconds so changes made by other users show up without reloading the page. */
+  private destroyRef = inject(DestroyRef);
+
   ngOnInit(): void {
-    this.api.myClaims().subscribe((claims) => (this.claims = claims));
+    interval(10000)
+      .pipe(
+        startWith(0),
+        switchMap(() => this.api.myClaims().pipe(catchError(() => of(null)))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((claims) => {
+        if (claims) this.claims = claims;
+      });
   }
 
   open(id: number): void {

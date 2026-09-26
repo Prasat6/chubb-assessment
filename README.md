@@ -6,8 +6,8 @@ claims. There are three kinds of user:
 | Role | What they do |
 |---|---|
 | **Claimant** | Reports an incident, uploads photos/documents, answers the officer's questions, follows the claim's progress |
-| **Claims officer** | Picks up new claims from the queue, requests information, records an estimated liability, approves/rejects/settles |
-| **Manager** | Everything an officer can do, plus is alerted about high-value claims (≥ RM 50,000) and watches total outstanding exposure |
+| **Claims officer** | Picks up new claims from the queue, requests information, records an estimated liability, approves/rejects/settles, and works to resolution-time targets (motor 1 day, property 2 days) |
+| **Manager** | Everything an officer can do, plus is alerted about high-value claims (≥ RM 50,000, shown in red) and watches outstanding exposure and on-time performance on the dashboard |
 
 - **Backend:** Java 17 + Spring Boot 3 (REST API, in-memory H2 database, optional Kafka)
 - **Frontend:** Angular 17
@@ -134,14 +134,34 @@ window, so open a new terminal to go back to running without Kafka.
 
 Stop Kafka with `docker compose down`.
 
-## 8. Run the tests
+## 8. Business settings
+
+These are in `backend/src/main/resources/application.yml`. Change a value,
+then restart the backend.
+
+```yaml
+app:
+  claims:
+    high-value-threshold: 50000   # RM: manager alert + red "HIGH VALUE" rows
+    sla-hours:
+      motor: 24                   # resolution target, 1 day
+      property: 48                # resolution target, 2 days
+    sla-at-risk-fraction: 0.25    # "At risk" in the last 25% of the target
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+```
+
+The frontend reads these through `GET /api/config`, so screens and alerts
+always agree. See the user manual, section 4.7.
+
+## 9. Run the tests
 
 ```bash
 cd backend
 mvn test
 ```
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Fix |
 |---|---|

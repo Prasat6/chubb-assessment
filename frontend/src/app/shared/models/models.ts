@@ -29,7 +29,13 @@ export interface ClaimSummaryDto {
   updatedAt: string;
   claimant: UserDto;
   assignedOfficer: UserDto | null;
+  /** When the claim should be settled or rejected by (submission + SLA hours for its type). */
+  dueAt: string;
+  slaState: SlaState;
 }
+
+/** Resolution-time (SLA) state, computed by the backend's SlaPolicy. */
+export type SlaState = 'ON_TRACK' | 'AT_RISK' | 'OVERDUE' | 'MET' | 'MISSED';
 
 export interface InfoRequestDto {
   id: number;
@@ -79,6 +85,8 @@ export interface ClaimDetailDto extends Omit<ClaimSummaryDto, never> {
   notes: ClaimNoteDto[];
   statusHistory: StatusHistoryDto[];
   attachments: AttachmentDto[];
+  slaTargetHours: number;
+  resolvedAt: string | null;
 }
 
 export interface WorkloadDto {
@@ -100,9 +108,30 @@ export interface StatusBreakdownDto {
   count: number;
 }
 
+/** Business settings from GET /api/config (e.g. the threshold from application.yml). */
+export interface AppConfig {
+  highValueThreshold: number;
+  /** SLA target in hours per claim type, e.g. { MOTOR: 24, PROPERTY: 48 }. */
+  slaHours: Record<string, number>;
+  currency: string;
+}
+
 export interface ExposureDto {
   totalOutstandingLiability: number;
   openClaims: number;
   byType: TypeBreakdown[];
   byStatus: StatusBreakdownDto[];
+  overdueClaims: number;
+  atRiskClaims: number;
+  slaByType: SlaBreakdown[];
+}
+
+export interface SlaBreakdown {
+  type: ClaimType;
+  targetHours: number;
+  onTrack: number;
+  atRisk: number;
+  overdue: number;
+  resolved: number;
+  resolvedOnTime: number;
 }

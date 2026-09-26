@@ -146,7 +146,8 @@ you signed in for that browser tab.
 ## 4. Screens and dashboards by role
 
 Each role sees a different set of tabs and a different landing page. The
-sketches below show the layout of each screen.
+sketches below show the layout of each screen, using the demo data you get
+right after starting the backend.
 
 | Role | Tabs in the top bar | Lands on |
 |---|---|---|
@@ -156,6 +157,17 @@ sketches below show the layout of each screen.
 
 Every screen has the same top bar: the Chubb logo, the notification bell 🔔
 with its unread count, your name and role, and **Switch user**.
+
+**Screens update themselves.** Lists, the dashboard and an open claim page
+refresh every 10 seconds, so you see what other users do (a reply, a new
+claim, a status change) without reloading.
+
+**Two colours to know:**
+
+- **Red row with a HIGH VALUE tag:** the claim's estimated liability is at or
+  above the high-value threshold (RM 50,000 by default).
+- **Orange "Overdue" badge:** the claim is past its resolution-time target
+  (motor 1 day, property 2 days by default). See 4.6.
 
 ### 4.1 Claimant: My claims
 
@@ -199,32 +211,34 @@ with its unread count, your name and role, and **Switch user**.
 to me**.
 
 ```
-┌ Unassigned claims ─────────────────────────────────────────┐
-│  ID   Type       Claimant       Incident date   Submitted  │
-│  #1   MOTOR      Amira Hassan   2026-08-01      09:55      │
-│  #2   PROPERTY   Wei Lin Tan    2026-07-28      09:55      │
-└────────────────────────────────────────────────────────────┘
+Unassigned claims
+  ID   Type       Claimant       Incident date   Submitted  Resolution target
+  #1   MOTOR      Amira Hassan   2026-08-01      09:55      [Due in 23h]
+  #2   PROPERTY   Wei Lin Tan    2026-07-28      09:55      [Due in 1d 23h]
 Empty queue: "Queue is empty — nice work."
 ```
 
-**My workload:** five counters, then your assigned claims.
+**My workload:** counters, then your assigned claims.
 
 ```
-┌────────┐ ┌────────┐ ┌──────────┐ ┌────────┐ ┌────────┐
-│   0    │ │   1    │ │    0     │ │   1    │ │   2    │
-│ New /  │ │ Under  │ │ Awaiting │ │Assessed│ │ Total  │
-│submitted│ │ review │ │ claimant │ │        │ │assigned│
-└────────┘ └────────┘ └──────────┘ └────────┘ └────────┘
-┌ My workload ──────────────────────────────────────────────────────┐
-│  ID  Type      Claimant      Status        Liability   Updated   │
-│  #4  PROPERTY  Wei Lin Tan   ASSESSED      RM 8500     10:05     │
-│  #3  MOTOR     Amira Hassan  UNDER REVIEW  —           10:02     │
-└───────────────────────────────────────────────────────────────────┘
+┌───────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐
+│     0     │ │    1     │ │    0     │ │    1     │ │    2     │ │    0    │ │    0    │
+│   New /   │ │  Under   │ │ Awaiting │ │ Assessed │ │  Total   │ │ Overdue │ │ At risk │
+│ submitted │ │  review  │ │ claimant │ │          │ │ assigned │ │         │ │         │
+└───────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └─────────┘ └─────────┘
+My workload
+  ID  Type      Claimant      Status        Resolution target    Liability
+  #5  MOTOR     Amira Hassan  ASSESSED      [At risk · 4h left]  RM 62,000 [HIGH VALUE]   ← red row
+  #4  PROPERTY  Wei Lin Tan   ASSESSED      [Due in 1d 20h]      RM 8,500
+  #3  MOTOR     Amira Hassan  UNDER REVIEW  [Due in 20h]         —
 ```
 
 - **Awaiting claimant** counts claims waiting for an answer to your
   information request, so you know what's blocked on someone else.
-- Liability shows **—** until the claim is assessed.
+- **Overdue** and **At risk** count your claims that are past, or close to,
+  their resolution-time target (see 4.6).
+- Liability shows **—** until the claim is assessed. Rows at or above the
+  high-value threshold are **red** with a **HIGH VALUE** tag.
 
 ### 4.4 Claim page (all roles, different buttons)
 
@@ -234,7 +248,8 @@ who you are:
 | Part of the page | Claimant (own claim) | Assigned officer | Other officer / manager |
 |---|---|---|---|
 | Details, status badge, liability | ✔ | ✔ | ✔ |
-| Action buttons (assign, assess, approve…) | — | ✔ (depend on status, see 7) | **Assign to me** only, if unassigned |
+| Resolution target (badge and due time) | ✔ | ✔ | ✔ |
+| Action buttons (assign, assess, approve…) | — | ✔ (depend on status, see section 7) | **Assign to me** only, if unassigned |
 | Information requests | Can **reply** | Can **ask** | Read only |
 | Internal notes | Hidden | ✔ | ✔ |
 | Timeline | ✔ | ✔ | ✔ |
@@ -242,23 +257,70 @@ who you are:
 
 The **timeline** shows the main path (Submitted → Under review → Assessed →
 Approved → Settled). Completed steps are dark blue, the **current step is red**,
-and later steps are grey. Hover over a completed step to see when it
-happened and who did it.
+and later steps are grey. Each completed step shows when it happened and who
+did it.
 
 ### 4.5 Exposure dashboard (manager and officers)
 
+The dashboard has four parts, top to bottom.
+
+**1. Resolution time (SLA):** are claims being resolved on time?
+
+```
+┌ Resolution time (SLA) ──────────────────────────────────────────────────┐
+│ Target from submission to settlement or rejection:                      │
+│ MOTOR 1 day · PROPERTY 2 days (set in application.yml)                  │
+│  ┌─────────┐ ┌────────────────────┐ ┌──────────┐ ┌──────────────────┐   │
+│  │    1    │ │         1          │ │    3     │ │       75%        │   │
+│  │ Overdue │ │ At risk (due soon) │ │ On track │ │ Resolved on time │   │
+│  └─────────┘ └────────────────────┘ └──────────┘ └──────────────────┘   │
+│  Type      Target   On track  At risk  Overdue  Resolved on time        │
+│  MOTOR     1 day    1         1        1        2 / 3                   │
+│  PROPERTY  2 days   2         0        0        1 / 1                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Overdue** (orange): open claims past their target.
+- **At risk** (amber): open claims in the last quarter of their target time
+  (motor: last 6 hours, property: last 12 hours).
+- **Resolved on time:** the share of settled or rejected claims that met their
+  target. This is the team's performance figure.
+
+**2. Totals:** outstanding liability and open claims.
+
 ```
 ┌──────────────────────────────┐ ┌──────────────────┐
-│   RM 8,500                   │ │   3              │
+│   RM 8,500                   │ │   4              │
 │   Total outstanding liability│ │   Open claims    │
 └──────────────────────────────┘ └──────────────────┘
+```
+
+**3. Open claims by liability:** every open claim, highest liability first.
+Click a row to open the claim.
+
+```
+Open claims by liability
+  ID  Type      Claimant      Status     Officer     Resolution target  Liability
+  #5  MOTOR     Amira Hassan  ASSESSED   Priya Nair  [Overdue by 2h]    RM 62,000 [HIGH VALUE]   ← red row
+  #4  PROPERTY  Wei Lin Tan   ASSESSED   Priya Nair  [Due in 1d 20h]    RM 8,500
+  #1  MOTOR     Amira Hassan  SUBMITTED  —           [Due in 23h]       Not assessed
+```
+
+- **Red rows** are at or above the high-value threshold (RM 50,000 by
+  default). They're the claims driving the exposure figure.
+- This list shows claimant names, so it's only available to officers and
+  managers.
+
+**4. Breakdowns by claim type and by status.**
+
+```
 ┌ By claim type ──────────────────────────────────┐
 │  Type       Open claims   Liability             │
 │  MOTOR      2             RM 0                  │
-│  PROPERTY   1             RM 8,500              │
+│  PROPERTY   2             RM 8,500              │
 └─────────────────────────────────────────────────┘
 ┌ By status ──────────────────────────────────────┐
-│  SUBMITTED 1 · UNDER REVIEW 1 · ASSESSED 1 · …  │
+│  SUBMITTED 2 · UNDER REVIEW 1 · ASSESSED 1 · …  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -266,9 +328,40 @@ happened and who did it.
   claim that isn't settled, rejected or closed.
 - Claims that haven't been assessed yet count as **RM 0**, because they have
   no figure. That's why officers must enter a liability when assessing.
-- Refresh the page to see the latest figures.
+- The dashboard refreshes itself every 10 seconds.
 
-### 4.6 Notification bell
+### 4.6 Resolution-time badges
+
+Every claim shows how it's doing against its target. The clock starts when the
+claim is submitted and stops when it's **settled or rejected**.
+
+| Badge | Meaning |
+|---|---|
+| Due in 18h (green) | Open, comfortably within target |
+| At risk · 4h left (amber) | Open, in the last quarter of its target time |
+| Overdue by 2h (orange) | Open and past its target |
+| Met target (grey, green text) | Settled or rejected within target |
+| Missed target (grey, orange text) | Settled or rejected after the target |
+
+Hover over a badge to see the exact due date and time.
+
+### 4.7 Settings you can change
+
+These live in `backend/src/main/resources/application.yml`. Restart the
+backend after changing them.
+
+| Setting | Default | What it controls |
+|---|---|---|
+| `app.claims.high-value-threshold` | `50000` | Manager alert, plus red rows with a **HIGH VALUE** tag |
+| `app.claims.sla-hours.motor` | `24` | Resolution target for motor claims (1 day) |
+| `app.claims.sla-hours.property` | `48` | Resolution target for property claims (2 days) |
+| `app.claims.sla-at-risk-fraction` | `0.25` | When a claim turns "At risk" (the last 25% of its time) |
+| `app.kafka.enabled` | `false` (or env `KAFKA_ENABLED`) | Kafka event publishing and SMS path |
+
+Tip for a demo: set `sla-hours.motor: 1` to see claims turn **At risk** and
+**Overdue** within an hour.
+
+### 4.8 Notification bell
 
 Click 🔔 to open the list. Unread items have a red dot and a blue background.
 Click one to mark it read and open that claim, or use **Mark all read**. The
@@ -278,7 +371,8 @@ badge refreshes every 15 seconds and shows **9+** above nine.
 
 ```
 SUBMITTED ──assign──▶ UNDER_REVIEW ──request info──▶ INFO_REQUESTED
-                          ▲   │  ◀────resume review────────┘
+                          ▲   │  ◀─ claimant answers all ──┘
+                          │   │     (automatic, or officer clicks Resume review)
                           │   │
              back to review   └──assess (enter RM amount)──▶ ASSESSED
                           │                                    │
@@ -291,7 +385,7 @@ SUBMITTED ──assign──▶ UNDER_REVIEW ──request info──▶ INFO_RE
 |---|---|---|
 | **SUBMITTED** | New claim waiting in the officer queue | Any officer, by assigning it to themselves |
 | **UNDER_REVIEW** | An officer is investigating | The assigned officer |
-| **INFO_REQUESTED** | The officer asked the claimant a question | The assigned officer, via **Resume review** (normally after the claimant answers) |
+| **INFO_REQUESTED** | The officer asked the claimant a question | **Automatic:** returns to UNDER_REVIEW when the claimant has answered every open question. The officer can also click **Resume review** without waiting. |
 | **ASSESSED** | An estimated liability has been recorded | The assigned officer: approve, reject, or send back to review |
 | **APPROVED** | Payment agreed | The assigned officer: mark settled |
 | **REJECTED** | Claim declined (final) | — |
@@ -334,7 +428,8 @@ current status. Click a row to open the claim.
 When an officer needs more information, the claim moves to
 **INFO_REQUESTED** and you get a notification. Open the claim, type your answer
 under **Information requests**, and click **Submit response**. The officer is
-notified.
+notified, and once all their questions are answered the claim goes back to
+**UNDER REVIEW** automatically.
 
 ### Add, replace or remove photos and documents
 
@@ -381,10 +476,16 @@ the claim's status:
 | APPROVED | **Mark settled** |
 
 - **Request info:** write a question for the claimant. They're notified and
-  can reply on the claim page. You're notified when they reply.
+  can reply on the claim page. You're notified when they reply, and the claim
+  returns to **UNDER REVIEW** by itself once every question is answered.
+  **Resume review** is there if you want to continue without waiting.
+- **Resolution target:** every claim shows a badge such as *Due in 18h* or
+  *Overdue by 2h* (motor 1 day, property 2 days). Work the **At risk** and
+  **Overdue** ones first. My workload counts them for you.
 - **Move to assessed:** enter the **estimated liability in RM**. The amount is
   required and can't be negative. This figure feeds the exposure dashboard.
-  Claims of **RM 50,000 or more** also alert every manager.
+  Claims of **RM 50,000 or more** (the configurable high-value threshold)
+  also alert every manager, and their rows turn **red** in the lists.
 - **Add note:** internal notes, visible only to officers and managers.
 - **Attachments:** you can upload supporting documents (several at once) to
   claims assigned to you, replace or remove the ones you uploaded, and
@@ -401,20 +502,27 @@ themselves, and act on their own claims. Managers also get the following.
 The **Exposure dashboard** answers the question "how much money could we
 still have to pay out?" It shows:
 
+- **Resolution time (SLA):** how many open claims are overdue, at risk or on
+  track against their targets (motor 1 day, property 2 days), and what share
+  of resolved claims met their target. This is the team's performance figure.
 - **Total outstanding liability:** the sum of estimated liability across
   every claim that isn't SETTLED, REJECTED or CLOSED. Claims not yet assessed
   count as RM 0, because they have no figure yet.
 - **Open claims:** how many claims are still open.
-- **By claim type:** open count and liability for Motor vs Property.
-- **By status:** how many open claims are at each stage.
+- **Open claims by liability:** every open claim, highest liability first.
+  High-value claims are **red** with a **HIGH VALUE** tag. Click one to open
+  it.
+- **By claim type** and **by status** breakdowns.
 
-Officers can view the dashboard too. It shows totals only, with no
-claimant-level data.
+Officers can view the dashboard too. The open-claims list includes claimant
+names, so it's only shown to officers and managers. See section 4.5 for a
+sketch of the screen.
 
 ### High-value alerts
 
 Every manager gets a notification when a claim is assessed at
-**RM 50,000 or more**.
+**RM 50,000 or more**. The same claims are highlighted in red on the dashboard.
+The threshold is a setting (`app.claims.high-value-threshold`, see 4.7).
 
 ## 9. Notifications
 
@@ -500,6 +608,15 @@ lists what you might see, why, and what to do.
 | *"Amira Hassan responded to your information request on claim #3"* | The assigned officer |
 | *"Claim #5 assessed at RM 62000 - above the RM 50000 review threshold"* | Every manager: a **high-value warning** that needs their attention |
 
+### 10.5 Highlights on screen
+
+| You see | Why | What to do |
+|---|---|---|
+| A **red row** with a **HIGH VALUE** tag | Estimated liability is at or above the high-value threshold | Managers: review these first; they drive the exposure total |
+| An amber **At risk · 4h left** badge | The claim is in the last quarter of its resolution-time target | Prioritise it before it goes overdue |
+| An orange **Overdue by 2h** badge | The claim is past its target (motor 1 day, property 2 days) | Resolve it (settle or reject) as soon as possible |
+| **Missed target** on a closed claim | It was settled or rejected after its target | Nothing to do; it counts against the on-time rate |
+
 ## 11. A 5-minute end-to-end demo
 
 Start everything first ([section 2](#2-starting-and-stopping-the-platform)).
@@ -511,10 +628,13 @@ users as you go.
 2. **Priya (officer):** Queue → open Amira's new claim → **Assign to me**.
 3. **Priya:** **Request info** → "Please upload a photo of the other car."
 4. **Amira:** the bell shows 1 → click it → type a reply → **Submit response**.
-5. **Priya:** the bell shows a reply notification → open the claim →
-   **Resume review** → **Move to assessed** → enter `62000` → Confirm.
-6. **Sarah (manager):** the bell shows a high-value alert. The dashboard's
-   total outstanding liability has gone up by RM 62,000.
+   The claim goes back to **UNDER REVIEW** by itself.
+5. **Priya:** within about 10 seconds her page shows the reply and the new
+   status → **Move to assessed** → enter `62000` → Confirm.
+6. **Sarah (manager):** the bell shows a high-value alert. On the dashboard,
+   claim #5 is at the top of **Open claims by liability** in **red** with
+   **HIGH VALUE**, and the total outstanding liability has gone up by
+   RM 62,000. The **Resolution time** card shows it as on track.
 7. **Priya:** **Approve** → **Mark settled**. Sarah's dashboard total drops
    again.
 8. Watch `websocket-test.html` throughout. Every status change adds an
@@ -582,7 +702,17 @@ are:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/dashboard/exposure` | Totals by type and status (no header needed) |
+| GET | `/api/dashboard/exposure` | Totals by type and status, plus resolution-time figures: `overdueClaims`, `atRiskClaims`, `slaByType` (no header needed) |
+| GET | `/api/dashboard/open-claims` | Every open claim, highest liability first. **Officer/manager only** (includes claimant names) |
+
+### Configuration
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/config` | `{"highValueThreshold": 50000, "slaHours": {"MOTOR": 24, "PROPERTY": 48}, "currency": "RM"}` (no header needed) |
+
+Claim lists and the claim page also include `dueAt` (the resolution-target
+time) and `slaState` (`ON_TRACK`, `AT_RISK`, `OVERDUE`, `MET` or `MISSED`).
 
 ### Notifications (in-app)
 
@@ -632,4 +762,10 @@ These are deliberate prototype shortcuts; see
 - **The WebSocket feed is shared.** It broadcasts every dispatch to every
   connected client, with no per-user filtering.
 - **No pagination** on lists.
+- **Screens refresh by polling every 10 seconds**, not by live push. A
+  per-user push channel needs real login first.
+- **Overdue claims are highlighted but don't send alerts.** A scheduled
+  reminder to the manager is the next step.
+- **One threshold and one set of targets for all markets.** In production
+  these would be set per market.
 - **CLOSED status has no button** in the UI.

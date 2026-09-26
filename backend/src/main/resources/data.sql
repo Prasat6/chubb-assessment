@@ -1,10 +1,10 @@
 -- Seeded demo users. Ids are predictable (H2 identity starts at 1) so the
 -- frontend's mock-login dropdown and this file stay in sync.
-INSERT INTO app_user (name, email, phone, role) VALUES ('Amira Hassan', 'amira.hassan@example.com', '+60 12653 4501', 'CLAIMANT');
-INSERT INTO app_user (name, email, phone, role) VALUES ('Wei Lin Tan', 'weilin.tan@example.com', '+60 17567 4502', 'CLAIMANT');
-INSERT INTO app_user (name, email, phone, role) VALUES ('Priya Nair', 'priya.nair@chubb.example', '+60 19456 4503', 'OFFICER');
-INSERT INTO app_user (name, email, phone, role) VALUES ('Marcus Ong', 'marcus.ong@chubb.example', '+60 16364 4504', 'OFFICER');
-INSERT INTO app_user (name, email, phone, role) VALUES ('Sarah Lim', 'sarah.lim@chubb.example', '+60 16555 4505', 'MANAGER');
+INSERT INTO app_user (name, email, phone, role) VALUES ('Amira Hassan', 'amira.hassan@example.com', '+60 12-653 4501', 'CLAIMANT');
+INSERT INTO app_user (name, email, phone, role) VALUES ('Wei Lin Tan', 'weilin.tan@example.com', '+60 17-567 4502', 'CLAIMANT');
+INSERT INTO app_user (name, email, phone, role) VALUES ('Priya Nair', 'priya.nair@chubb.example', '+60 19-456 4503', 'OFFICER');
+INSERT INTO app_user (name, email, phone, role) VALUES ('Marcus Ong', 'marcus.ong@chubb.example', '+60 16-364 4504', 'OFFICER');
+INSERT INTO app_user (name, email, phone, role) VALUES ('Sarah Lim', 'sarah.lim@chubb.example', '+60 16-555 4505', 'MANAGER');
 
 -- A few sample claims so the queue/workload/dashboard aren't empty on first run.
 INSERT INTO claim (claimant_id, assigned_officer_id, type, status, incident_date, incident_description, estimated_liability, created_at, updated_at)

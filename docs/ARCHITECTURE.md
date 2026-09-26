@@ -81,11 +81,38 @@ Also: `ASSESSED -> UNDER_REVIEW` (send back for another look), and
 not silently allowed. Moving to `ASSESSED` also requires an estimated
 liability, since the exposure dashboard depends on it.
 
+When the claimant answers the **last** open information request, the claim
+moves from `INFO_REQUESTED` back to `UNDER_REVIEW` automatically, because the
+next action is the officer's. The officer can still resume manually.
+
 ## What a claims officer sees
 
 - **Queue**: unassigned `SUBMITTED` claims, oldest first, one-click "assign to me".
 - **My workload**: their assigned claims grouped by status, with a count badge
-  per status so they can see where their queue is backing up.
+  per status so they can see where their queue is backing up, plus **Overdue**
+  and **At risk** counts against the resolution-time targets.
+- **Resolution-time badge** on every claim ("Due in 18h", "Overdue by 2h"), so
+  the officer knows what to work on first.
+
+## Resolution-time targets (SLA)
+
+The brief asks for staff to see "their team's workload **and performance**".
+Workload was already covered; performance needed a measure. I chose
+**resolution time against a target per claim type**:
+
+- **Targets:** motor **1 day**, property **2 days**, from submission until the
+  claim is settled or rejected. They're set in `application.yml`
+  (`app.claims.sla-hours.*`), not in code, because targets differ by market
+  and product.
+- **One source of truth:** `SlaPolicy` (backend) computes each claim's due
+  time and state (*On track*, *At risk*, *Overdue*, *Met*, *Missed*). The DTOs
+  carry `dueAt` and `slaState`, and the frontend only displays them, so no
+  screen can disagree with another.
+- **Dashboard:** overdue, at-risk and on-track counts, plus the **on-time
+  rate** for resolved claims, by claim type.
+- **Not built yet:** proactive alerts when a claim becomes overdue (a
+  scheduled job feeding the existing notification path), per-officer
+  breakdowns, and business-hours calendars (currently wall-clock hours).
 
 ## What the exposure dashboard shows a manager
 
@@ -95,6 +122,19 @@ dimensions I had time for: by claim type and by status. This is the single
 number Chubb cares about most from the brief ("no real-time picture of
 outstanding liability exposure") so it's the one dashboard I made sure was
 correct rather than broad.
+
+It also lists **every open claim, highest liability first**. Claims at or
+above the **high-value threshold** (`app.claims.high-value-threshold`,
+RM 50,000 by default) are highlighted in red. The same threshold drives the
+manager alert, and the frontend reads it from `GET /api/config`, so the alert
+and the highlighting can't drift apart. Because this list shows claimant
+names, its endpoint (`/api/dashboard/open-claims`) is staff-only, unlike the
+aggregate `/exposure` figures.
+
+**Keeping screens current:** lists, the dashboard and an open claim page poll
+every 10 seconds. That's simple and good enough at prototype scale. The
+production answer is a per-user push channel (WebSocket or SSE), which needs
+real authentication first.
 
 ## In-app notifications
 

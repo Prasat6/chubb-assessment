@@ -76,7 +76,7 @@ Expected response (200):
 **POST** `http://localhost:8080/api/notify/sms`
 Body — needs both fields, `to`/`phone` **and** `message`/`text`:
 ```json
-{ "phone": "+60 12777 3333", "message": "Your claim #1 has moved to Under Review." }
+{ "phone": "+60 12-777 3333", "message": "Your claim #1 has moved to Under Review." }
 ```
 Same response shape, `channel: "SMS"`.
 

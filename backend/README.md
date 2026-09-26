@@ -65,10 +65,26 @@ simulated SMS (visible in `GET /api/notify/log` as `triggeredBy: KAFKA`).
 mvn test
 ```
 
-`ClaimStatusTest` covers the state-machine transition rules — the piece most
-worth testing given the whole domain hinges on it. `ClaimServiceTest` covers
-the service rules around assessment (liability required, not negative) and
-the officer-queue role check. Given more time this is
+| Test class | What it covers |
+|---|---|
+| `ClaimStatusTest` | The state-machine transition rules, the piece most worth testing given the whole domain hinges on it |
+| `ClaimServiceTest` | Assessment rules (liability required, not negative), role checks, photo add/replace/remove and the lock once decided, automatic return to review after the last answer, the high-value manager alert, and the open-claims list |
+| `SlaPolicyTest` | Resolution-time targets: motor 1 day, property 2 days, and the on track → at risk → overdue and met/missed states |
+
+## Business settings
+
+`src/main/resources/application.yml`, under `app.claims`:
+
+| Key | Default | Used for |
+|---|---|---|
+| `high-value-threshold` | `50000` | Manager alert and red "HIGH VALUE" rows |
+| `sla-hours.motor` | `24` | Motor resolution target |
+| `sla-hours.property` | `48` | Property resolution target |
+| `sla-at-risk-fraction` | `0.25` | When an open claim is flagged "at risk" |
+
+Exposed to the frontend by `GET /api/config`.
+
+Given more time this is
 where I'd add the bulk of further coverage (service-layer tests around
 role/ownership checks, and a couple of `@SpringBootTest` slice tests around
 the REST layer).

@@ -85,7 +85,7 @@ Key statements from the brief, which every requirement below traces back to:
 
 ### 1.2 Formulating requirements from the brief
 
-> **Prompt:** 📎 *Attached: `V2_FullStack_candidate_assessment_brief.docx`*
+> **Prompt:** *[Attached: `V2_FullStack_candidate_assessment_brief.docx`]*
 >
 > "Here's the Chubb APAC brief (attached). Can you pull out the functional and
 > non-functional requirements for each user type, trace each one back to the
@@ -121,7 +121,7 @@ the brief's own decomposition questions as open design questions.
 | FR7 | Progress a claim to settlement or rejection | Officer | B6 | Must | Yes: enforced state machine |
 | FR8 | See a consolidated view of own workload | Officer | B3, B6 | Must | Yes: workload counters and list |
 | FR9 | See real-time outstanding claims and liability exposure | Manager | B4 | Must | Yes: exposure dashboard by type and status |
-| FR10 | See the **team's** workload and **performance** | Manager | B6 | Should | **Partial:** own workload and exposure only; no per-officer team view or performance metrics |
+| FR10 | See the **team's** workload and **performance** | Manager | B6 | Should | **Partial:** resolution-time (SLA) performance by claim type (on track, at risk, overdue, on-time rate) and an all-open-claims list; no per-officer breakdown yet |
 | FR11 | Serve all roles from one Angular app | All | B7 | Must | Yes: role-based navigation and route guards |
 
 #### Non-functional requirements
@@ -197,8 +197,8 @@ as an open question and closed it in a later phase:
 
 - **Multi-market support (B1: six markets):** no market or currency per claim.
   Recorded as the first data-model extension.
-- **Team performance metrics (FR10):** such as cycle time per officer or SLA
-  breaches.
+- **Per-officer performance metrics (FR10):** such as cycle time per officer.
+  Team-level SLA performance was added later under CR-11.
 - Real authentication/SSO, a production database, and real email/SMS delivery.
 - File/photo evidence (later added under change control, see 1.7).
 
@@ -217,6 +217,9 @@ for impact and handled as a change request, not by quietly expanding scope.
 | CR-6 | Push as well as pull for the dispatch log | Demo requirement | WebSocket endpoint plus a test page | Implemented |
 | CR-7 | Currency shown as RM, not $ | Localisation (A1) | Display only | Implemented |
 | CR-8 | Incident photos: add more at any time, replace and remove them | Me | Two new endpoints, ownership and lock rules, thumbnails in the UI (see Design 3.9) | Implemented |
+| CR-9 | Claim status and lists must update after the other party acts | Me (found while testing) | Auto-return to review on the last answer; lists refresh every 10 s (see Design 3.10) | Implemented |
+| CR-10 | High-value threshold in configuration; red rows for high-value claims | Me | Setting in `application.yml`, config endpoint, open-claims list (see Design 3.11) | Implemented |
+| CR-11 | Resolution-time targets: motor 1 day, property 2 days, with a dashboard | Me | SLA policy, settings in `application.yml`, dashboard section and badges (see Design 3.12) | Implemented |
 
 **Rationale for handling these as CRs:** each one touched a phase that was
 already closed (usually design). Logging the impact before implementing kept
@@ -520,6 +523,88 @@ replacing it, and each file can be removed before submitting.
 - **Replace keeps the record:** a replaced file keeps its original upload date
   and gains an `updatedAt`, so the history of the evidence is still visible.
 
+### 3.10 Keeping both sides in sync (CR-9)
+
+> **Prompt (my decision):** "Once the claimant replies to the info request I
+> don't see the **status change**, and the **list doesn't update** for Priya."
+
+**AI proposed:**
+
+1. When the claimant answers the **last** open information request, move the
+   claim from INFO_REQUESTED back to **UNDER_REVIEW** automatically. With
+   several questions open, it waits until all are answered. The officer's
+   **Resume review** button stays for when they don't want to wait.
+2. Refresh the queue, workload, my-claims, dashboard and open claim page
+   **every 10 seconds**. The claim page only swaps in new data when something
+   has actually changed, so a half-typed form isn't wiped.
+
+**Decision:** Accepted.
+
+**Rationale:** after a reply the next action is the officer's, so the status
+should say so. Polling every 10 seconds is enough at this scale. A push channel
+per user (WebSocket/SSE) is the production answer, but it needs real
+authentication first, which is out of scope (A2).
+
+### 3.11 Configurable high-value threshold and red rows (CR-10)
+
+> **Prompt (my decision):** "Move the threshold into **application.yml**, and
+> highlight in **red** the rows in the manager's list for claims above the
+> threshold."
+
+**AI proposed:**
+
+- `app.claims.high-value-threshold: 50000` in `application.yml`, replacing the
+  constant in the code.
+- `GET /api/config`, so the frontend reads the same value instead of
+  hard-coding it.
+- A new **Open claims by liability** list on the dashboard (highest first),
+  from `GET /api/dashboard/open-claims`. It's **staff only**, because unlike
+  the totals it includes claimant names.
+- Rows at or above the threshold get a red background and a **HIGH VALUE**
+  tag, on the dashboard and in My workload.
+
+**Decision:** Accepted.
+
+**Rationale:** a business rule that differs by market should be configuration,
+not code (B1: six markets). The backend stays the single source of the value,
+so the alert and the highlighting can't disagree.
+
+### 3.12 Resolution-time targets (SLA) and dashboard (CR-11)
+
+> **Prompt (my decision):** "Can you also add a **duration threshold**, so a
+> **motor claim needs to be resolved in 1 day** and **property in 2 days**?
+> Show a dashboard for that, and put the thresholds in application.yml."
+
+**AI proposed:**
+
+| Setting (`application.yml`) | Value |
+|---|---|
+| `app.claims.sla-hours.motor` | 24 (1 day) |
+| `app.claims.sla-hours.property` | 48 (2 days) |
+| `app.claims.sla-at-risk-fraction` | 0.25 (flag the last quarter of the time) |
+
+- **Clock:** starts at submission and stops when the claim is **settled or
+  rejected**.
+- **States** (`SlaPolicy`): *On track*, *At risk*, *Overdue* while the claim
+  is open; *Met* or *Missed* once it's resolved.
+- **Dashboard:** a new "Resolution time (SLA)" card with Overdue, At risk, On
+  track and Resolved-on-time tiles, plus a table by claim type.
+- **Badges** such as "Due in 18h" or "Overdue by 2h" on the queue, workload,
+  open-claims list and claim page, and Overdue/At risk counters in My
+  workload.
+
+**Decision:** Accepted.
+
+**Rationale:**
+
+- This directly addresses the brief's "team's workload **and performance**"
+  (B6). The on-time rate is a real performance measure, not only a count.
+- Overdue uses **orange**, so it isn't confused with the red high-value
+  highlighting.
+- The rule lives in one backend class, so every screen agrees.
+- Next step: a scheduled job that notifies the manager when a claim becomes
+  overdue.
+
 ---
 
 ## Phase 4 — Coding
@@ -624,6 +709,25 @@ be compiled and run, not just read.
   Each image is fetched as a blob and shown through an object URL, which is
   released when the page closes.
 
+### 4.9 Sync, high-value highlighting and SLA (CR-9 to CR-11)
+
+**Implemented by the AI to the designs in 3.10–3.12, then reviewed:**
+
+- **Backend:**
+  - `respondToInfoRequest` returns the claim to UNDER_REVIEW once every
+    request is answered.
+  - `highValueThreshold` is injected from `application.yml`.
+  - New `SlaPolicy` component.
+  - Claim lists and the claim page now carry `dueAt` and `slaState`.
+  - `ExposureDto` gained overdue and at-risk counts and a per-type SLA
+    breakdown.
+  - New endpoints `GET /api/config` and `GET /api/dashboard/open-claims`.
+- **Frontend:**
+  - A reusable `app-sla-badge` component.
+  - 10-second refresh on all lists.
+  - Red high-value rows.
+  - The SLA card on the dashboard.
+
 ---
 
 ## Phase 5 — Testing
@@ -642,7 +746,8 @@ and the end-to-end flow is verified with Kafka both off and on.
 | Test class | Covers |
 |---|---|
 | `ClaimStatusTest` | Every allowed and forbidden state-machine transition, including the Info requested cycle and terminal states |
-| `ClaimServiceTest` | Assessment requires a non-negative liability; claimants can't read the officer queue; photos can be added, replaced and removed by their uploader only, and are locked once a claim is decided (CR-8) |
+| `ClaimServiceTest` | Assessment requires a non-negative liability; claimants can't read the officer queue; photos can be added, replaced and removed by their uploader only, and are locked once a claim is decided (CR-8); answering the last question returns the claim to review (CR-9); managers are alerted at or above the threshold only; the open-claims list is sorted and staff-only (CR-10) |
+| `SlaPolicyTest` | Motor is due after 1 day and property after 2; open claims move from on track to at risk to overdue; resolved claims are met or missed by their settle/reject time (CR-11) |
 
 **Rationale:** the whole domain hinges on the state machine, so an illegal
 transition is the most damaging class of bug. Service-level role and
@@ -692,6 +797,8 @@ confirmed on my machine.
 | D9 | Security | `websocket-test.html` injected message text as HTML (XSS) | Medium | Output escaped |
 | D10 | API | Malformed input or oversized uploads returned unclear errors, and a null message caused a 500 | Low | Consistent JSON error responses |
 | D11 | UI | Assessment label said SGD instead of RM (CR-7) | Low | Corrected |
+| D12 | Workflow | After the claimant answered, the claim stayed on INFO_REQUESTED until the officer noticed (found in my UI testing) | Medium | Automatic return to UNDER_REVIEW on the last answer (CR-9) |
+| D13 | UI | The queue, workload and claim pages didn't show the other user's changes until reloaded (found in my UI testing) | Medium | 10-second refresh (CR-9) |
 
 **Lesson recorded:** D2, D3 and D5 are all behaviours that only appear on a
 path the happy-path demo doesn't exercise (no broker, a dispatch failure, a
@@ -707,11 +814,16 @@ Run on Windows 11 with JDK 21, Maven 3.9, Node 24 and Docker Desktop:
 | Backend builds and starts with Kafka on (`KAFKA_ENABLED=true`, broker in Docker) | `Started ClaimsPlatformApplication` | Pass |
 | `POST /api/notify/sms` from SoapUI | Dispatch `SENT`, `triggeredBy: REST`, pushed to the live feed | Pass |
 | `POST /api/officer/claims/1/assign` (`X-User-Id: 3`) | Claim moves to UNDER_REVIEW; EMAIL (IN_APP) then SMS (KAFKA) appear in the live feed | Pass |
-| Backend unit tests (15), compiled against the project's own Spring Boot 3.3.4 and Lombok libraries | All pass | Pass (run during CR-8) |
-| Angular compile with strict template checking (`ngc`) | No errors | Pass (run during CR-8) |
-| `mvn clean test` on my machine | All unit tests pass | *To record before release* |
-| Add several photos, replace one and remove one in the UI (claimant, then officer) | Thumbnails update; other users' files show no Replace/Remove | *To record before release* |
-| Claimant → officer → manager flow in the UI | Status changes, notifications and the dashboard total update correctly | *To record before release* |
+| Backend unit tests (24), compiled against the project's own Spring Boot 3.3.4 and Lombok libraries | All pass | Pass (run during CR-11) |
+| Angular compile with strict template checking (`ngc`) | No errors | Pass (run during CR-11) |
+| Claimant replies to an information request (UI) | Status returns to UNDER REVIEW and the officer's page updates without a refresh | Found failing, fixed under CR-9, re-tested: **Pass** |
+| High-value and SLA dashboard (UI) | 62,000 claim in red with HIGH VALUE; SLA tiles and badges shown | **Pass** |
+| `mvn clean test` on my machine (24 tests) | All unit tests pass | **Pass** |
+| Add several photos, replace one and remove one in the UI (claimant, then officer) | Thumbnails update; other users' files show no Replace/Remove | **Pass** |
+| Claimant → officer → manager flow in the UI | Status changes, notifications and the dashboard total update correctly | **Pass** |
+| SLA overdue check (motor target temporarily set to 0 h) | Motor claims shown as Overdue on the dashboard and claim page | **Pass** |
+| Threshold change (temporarily set to RM 5,000) | RM 8,000 claim shown in red and manager alerted | **Pass** |
+| Settle a claim | Badge shows Met target; attachments locked; dashboard total and on-time rate update | **Pass** |
 
 ---
 

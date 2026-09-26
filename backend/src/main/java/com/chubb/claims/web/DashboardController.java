@@ -1,11 +1,15 @@
 package com.chubb.claims.web;
 
+import com.chubb.claims.domain.User;
+import com.chubb.claims.dto.Dtos.ClaimSummaryDto;
 import com.chubb.claims.dto.Dtos.ExposureDto;
 import com.chubb.claims.service.ClaimService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Note: not role-gated to MANAGER only — an officer benefiting from seeing
@@ -23,5 +27,11 @@ public class DashboardController {
     @GetMapping("/exposure")
     public ExposureDto exposure() {
         return claimService.exposure();
+    }
+
+    /** Open claims, highest liability first. Staff only (includes claimant names). */
+    @GetMapping("/open-claims")
+    public List<ClaimSummaryDto> openClaims(@CurrentUser User user) {
+        return claimService.openClaims(user);
     }
 }

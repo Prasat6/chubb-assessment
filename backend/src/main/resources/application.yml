@@ -57,6 +57,18 @@ spring:
       max-request-size: 12MB
 
 app:
+  claims:
+    # Claims assessed at or above this estimated liability (RM) trigger a
+    # high-value alert to every manager and are highlighted in red on the
+    # dashboard and workload lists. In production this would be per market.
+    high-value-threshold: 50000
+    # Resolution-time targets (SLA): hours from submission until the claim is
+    # settled or rejected. Shown on the dashboard, workload and claim pages.
+    sla-hours:
+      motor: 24      # 1 day
+      property: 48   # 2 days
+    # An open claim is "at risk" when less than this share of its target is left.
+    sla-at-risk-fraction: 0.25
   kafka:
     # Kafka is OFF by default so the app runs with zero extra setup. With it
     # off, claim events are simply not published (no 2-second stall per claim

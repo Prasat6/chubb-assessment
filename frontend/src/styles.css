@@ -208,3 +208,26 @@ tr.clickable:hover { background: #f8fafc; }
 .attachment-meta { font-size: 11px; color: var(--text-muted); }
 .attachment-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .attachment-actions button { margin: 0; padding: 4px 8px; font-size: 12px; }
+
+/* High-value claims (liability >= app.claims.high-value-threshold) */
+tr.high-value td { background: #fdecee; color: #8a0b1f; font-weight: 600; }
+tr.high-value td:first-child { box-shadow: inset 4px 0 0 var(--chubb-red); }
+tr.high-value:hover td { background: #fbdde1; }
+.hv-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 8px;
+  background: var(--chubb-red); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+}
+.high-value-legend { color: var(--chubb-red); font-weight: 700; }
+
+/* Resolution-time (SLA) badges and tiles */
+.sla-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.sla-badge.ON_TRACK { background: #e6f4ea; color: #1e6b34; }
+.sla-badge.AT_RISK  { background: #fff4d6; color: #8a5a00; }
+.sla-badge.OVERDUE  { background: #c2410c; color: #fff; }
+.sla-badge.MET      { background: #eef1f5; color: #1e6b34; }
+.sla-badge.MISSED   { background: #eef1f5; color: #c2410c; }
+.stat.sla-stat.OVERDUE .value { color: #c2410c; }
+.stat.sla-stat.AT_RISK .value { color: #b27700; }
+.stat.sla-stat.ON_TRACK .value { color: #1e6b34; }
+td.sla-cell-bad { color: #c2410c; font-weight: 700; }
+td.sla-cell-warn { color: #b27700; font-weight: 700; }

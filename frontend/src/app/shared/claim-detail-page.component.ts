@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnDestroy, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, from } from 'rxjs';
+import { Observable, from, interval } from 'rxjs';
 import { concatMap, toArray } from 'rxjs/operators';
 import { AuthService } from '../auth/auth.service';
 import { ApiService } from '../core/api.service';
@@ -56,6 +56,28 @@ export class ClaimDetailPageComponent implements OnInit, OnDestroy {
       this.claim = null;
       this.error = '';
       this.load();
+    });
+
+    // Pick up changes made by the other party (e.g. the claimant answering while the
+    // officer has the claim open) without a manual reload.
+    interval(10000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.refreshIfChanged());
+  }
+
+  /** Only swaps in the new data if something actually changed, so an open form isn't reset needlessly. */
+  private refreshIfChanged(): void {
+    if (!this.claim) return;
+    const claimId = this.claimId;
+    this.api.getClaim(claimId).subscribe({
+      next: (c) => {
+        if (claimId !== this.claimId || !this.claim) return;
+        if (c.updatedAt !== this.claim.updatedAt || c.status !== this.claim.status) {
+          this.claim = c;
+          this.loadPreviews(c);
+        }
+      },
+      error: () => undefined, // background refresh: stay quiet, the next tick will retry
     });
   }
 
